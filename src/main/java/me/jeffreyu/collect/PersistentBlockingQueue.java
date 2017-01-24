@@ -14,14 +14,9 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
-
-import javax.xml.crypto.Data;
 
 import static me.jeffreyu.collect.Preconditions.*;
 import static me.jeffreyu.collect.Serializers.INTEGER_SERIALIZER;
@@ -378,7 +373,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public Iterator<E> iterator() {
-        return null;
+        return new Itr();
     }
 
     public static class Builder<E> {
@@ -432,7 +427,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         }
     }
 
-    class Iter implements Iterator<E> {
+    class Itr implements Iterator<E> {
 
         @Override
         public boolean hasNext() {
@@ -442,39 +437,6 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         @Override
         public E next() {
             return null;
-        }
-    }
-
-    class Position {
-
-        final int page;
-        final long offset;
-
-        Position(int page, long offset) {
-            this.page = page;
-            this.offset = offset;
-        }
-
-        int getPage() {
-            return page;
-        }
-
-        long getOffset() {
-            return offset;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Position position = (Position) o;
-            return page == position.page &&
-                    offset == position.offset;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(page, offset);
         }
     }
 
@@ -562,14 +524,6 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
         void setTailOffset(int offset) {
             buffer.putInt(IDX_TAIL_OFFSET, offset);
-        }
-
-        Position getHeader() {
-            return new Position(getHeadFile(), getHeadOffset());
-        }
-
-        Position getTail() {
-            return new Position(getTailFile(), getTailOffset());
         }
 
         @Override
