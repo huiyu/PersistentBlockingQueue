@@ -43,11 +43,12 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
     volatile Page head;
     volatile Page tail;
 
-    protected PersistentBlockingQueue(File file,
-                                      Serializer<E> serializer,
-                                      int capacity,
-                                      long pageSize,
-                                      int maxIdlePages) {
+    protected PersistentBlockingQueue(
+            File file,
+            Serializer<E> serializer,
+            int capacity,
+            long pageSize,
+            int maxIdlePages) {
         this.directory = file;
         this.serializer = serializer;
         this.allocator = new PageAllocator(directory, maxIdlePages, pageSize);
@@ -57,18 +58,15 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             if (!file.exists()) {
                 if (!file.mkdirs()) // try make dirs
                     throw new IOException("Can't create directory: " + file.getName());
-
                 this.index = new Index(indexFile, capacity);
-            } else {
-                if (file.list() != null && file.list().length != 0) {
-                    if (!indexFile.exists()) {
-                        throw new IllegalArgumentException(
-                                file.getName() + " is already exist and is not a persistent queue");
-                    }
-                    this.index = new Index(indexFile);
-                } else {
-                    this.index = new Index(indexFile, capacity);
+            } else if (file.list() != null && file.list().length != 0) {
+                if (!indexFile.exists()) {
+                    String msg = file.getName() + " is already exist and is not a persistent queue";
+                    throw new IllegalArgumentException(msg);
                 }
+                this.index = new Index(indexFile);
+            } else {
+                this.index = new Index(indexFile, capacity);
             }
             initialize();
         } catch (IOException e) {
@@ -211,9 +209,9 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
             final Page[] pageHolder = new Page[]{this.head};
             final int[] pageOffsetHolder = new int[]{index.getHeadOffset()};
-           
+
             Consumer<byte[]> reader = (byte[] dst) -> {
-                
+
                 Page page = pageHolder[0];
                 int pageOffset = pageOffsetHolder[0];
 
@@ -264,12 +262,37 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public int drainTo(Collection<? super E> c) {
-        return 0;
+        return drainTo(c, Integer.MAX_VALUE);
     }
 
     @Override
     public int drainTo(Collection<? super E> c, int maxElements) {
-        return 0;
+        checkNotNull(c);
+        checkArgument(c != this);
+        if (maxElements <= 0) return 0;
+
+        final Index index = this.index;
+        final ReentrantLock lock = this.lock;
+        lock.lock();
+        try {
+            int n = Math.min(maxElements, index.getSize());
+            int i = 0;
+            try {
+                while (i < n) {
+                    byte[] data = dequeue();
+                    E e = serializer.decode(data);
+                    c.add(e);
+                    i++;
+                }
+                return n;
+            } finally {
+                if (i > 0) {
+                    notFull.signal();
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
     }
 
     protected void enqueue(byte[] data) {
@@ -352,6 +375,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         index.setHeadOffset(headOffset);
     }
 
+
     @Override
     public Iterator<E> iterator() {
         return null;
@@ -407,7 +431,6 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             return new PersistentBlockingQueue<>(file, serializer, capacity, pageSize, maxIdlePages);
         }
     }
-
 
     class Iter implements Iterator<E> {
 

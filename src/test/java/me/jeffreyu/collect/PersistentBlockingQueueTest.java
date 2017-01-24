@@ -394,4 +394,30 @@ public class PersistentBlockingQueueTest {
             assertArrayEquals(data, peeked);
         }
     }
+
+    @Test
+    public void testDrainTo() throws Exception {
+        File file = tempFolder.newFolder();
+        PersistentBlockingQueue<byte[]> queue = new PersistentBlockingQueue.Builder<byte[]>(file)
+                .serializer(Serializers.BYTE_ARRAY_SERIALIZER)
+                .build();
+
+        byte[] data = new byte[1024];
+        for (int i = 0; i < 100; i++) {
+            random.nextBytes(data);
+            queue.put(data);
+        }
+        assertEquals(100, queue.size());
+        
+        List<byte[]> drainTo = new ArrayList<>();
+        int count = queue.drainTo(drainTo, 10);
+        assertEquals(10, count);
+        assertEquals(10, drainTo.size());
+        assertEquals(90, queue.size());
+        
+        count = queue.drainTo(drainTo, 100);
+        assertEquals(90, count);
+        assertEquals(100, drainTo.size());
+        assertTrue(queue.isEmpty());
+    }
 }
