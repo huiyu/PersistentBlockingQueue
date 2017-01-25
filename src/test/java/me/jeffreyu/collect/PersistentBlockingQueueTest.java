@@ -437,4 +437,21 @@ public class PersistentBlockingQueueTest {
             assertArrayEquals(datas.get(i++), data);
         }
     }
+    
+    @Test
+    public void testDelete() throws Exception {
+        File file = tempFolder.newFolder();
+        PersistentBlockingQueue<byte[]> queue = new PersistentBlockingQueue.Builder<byte[]>(file)
+                .serializer(Serializers.BYTE_ARRAY_SERIALIZER)
+                .build();
+        
+        for (int i = 0; i < 100; i++) {
+            byte[] data = new byte[1024];
+            random.nextBytes(data);
+            queue.put(data);
+        }
+        
+        queue.delete();
+        assertFalse(file.exists());
+    }
 }

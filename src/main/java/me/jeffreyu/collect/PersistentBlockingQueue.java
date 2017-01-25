@@ -1,13 +1,18 @@
 package me.jeffreyu.collect;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.AbstractQueue;
 import java.util.Collection;
 import java.util.Iterator;
@@ -342,6 +347,24 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
     @Override
     public Iterator<E> iterator() {
         return new Itr();
+    }
+
+    public void delete() {
+        allocator.pages.values().forEach(page -> ByteBufferCleaner.clean(page.buffer));
+        ByteBufferCleaner.clean(index.buffer);
+        try {
+            Files.walkFileTree(directory.toPath(), new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+                        throws IOException {
+                    Files.deleteIfExists(file);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            Files.deleteIfExists(directory.toPath());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     public static class Builder<E> {
