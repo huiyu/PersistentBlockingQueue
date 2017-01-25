@@ -11,12 +11,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.AbstractQueue;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Consumer;
 
 import static me.jeffreyu.collect.Preconditions.*;
 import static me.jeffreyu.collect.Serializers.INTEGER_SERIALIZER;
@@ -292,7 +290,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
     protected byte[] dequeue() {
         // assert lock.getHoldCount() == 1
         Position head = index.getHead();
-        
+
         Position pos = head;
         byte[] lenData = new byte[4];
         pos = read(lenData, pos);
@@ -400,16 +398,12 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     class Itr implements Iterator<E> {
 
-        private volatile Page currentPage;
-        private volatile int currentPageOffset;
+        private volatile Position curPos;
 
         Itr() {
-            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
             lock.lock();
             try {
-                int pageId = index.getHeadFile();
-                this.currentPage = allocator.acquire(pageId);
-                this.currentPageOffset = index.getHeadOffset();
+                curPos = index.getHead();
             } finally {
                 lock.unlock();
             }
@@ -417,11 +411,10 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
         @Override
         public boolean hasNext() {
-            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
             lock.lock();
             try {
-                return currentPage.getId() == index.getHeadFile()
-                        && currentPageOffset == index.getHeadOffset();
+                return curPos.page.getId() == index.getTailFile()
+                        && curPos.offset == index.getTailOffset();
             } finally {
                 lock.unlock();
             }
@@ -429,11 +422,14 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
         @Override
         public E next() {
-            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
             lock.lock();
             try {
-
-                return null;
+                byte[] data = new byte[4];
+                Position newPos = read(data, curPos);
+                data = new byte[INTEGER_SERIALIZER.decode(data)];
+                newPos = read(data, newPos);
+                curPos = newPos;
+                return serializer.decode(data);
             } finally {
                 lock.unlock();
             }

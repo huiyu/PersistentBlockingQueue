@@ -22,7 +22,7 @@ import static org.junit.Assert.assertTrue;
 
 public class PersistentBlockingQueueTest {
 
-    private Random random = new Random();
+    private final Random random = new Random();
 
     @Rule
     public TemporaryFolder tempFolder = new TemporaryFolder();
@@ -416,5 +416,25 @@ public class PersistentBlockingQueueTest {
         assertEquals(90, count);
         assertEquals(100, drainTo.size());
         assertTrue(queue.isEmpty());
+    }
+
+    @Test
+    public void testIterator() throws Exception {
+        File file = tempFolder.newFolder();
+        PersistentBlockingQueue<byte[]> queue = new PersistentBlockingQueue.Builder<byte[]>(file)
+                .serializer(Serializers.BYTE_ARRAY_SERIALIZER)
+                .build();
+        List<byte[]> datas = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            byte[] data = new byte[1024];
+            random.nextBytes(data);
+            datas.add(data);
+            queue.put(data);
+        }
+
+        int i = 0;
+        for (byte[] data : queue) {
+            assertArrayEquals(datas.get(i++), data);
+        }
     }
 }
