@@ -446,7 +446,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         }
     }
 
-    class Index implements Closeable {
+    class Index {
 
         static final int LENGTH = 24;
         static final int IDX_SIZE = 0;
@@ -486,6 +486,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
                     StandardOpenOption.WRITE);
             buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, LENGTH);
             buffer.load();
+            channel.close();
         }
 
         int getSize() {
@@ -538,12 +539,6 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
         Position getTail() {
             return new Position(allocator.acquire(getTailFile()), getTailOffset());
-        }
-
-        @Override
-        public void close() throws IOException {
-            channel.close();
-            ByteBufferCleaner.clean(buffer);
         }
     }
 }
