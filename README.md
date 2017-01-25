@@ -4,7 +4,7 @@
 
 ## Basic Usage
 
-`PersistentBlockingQueue` implements the `java.util.concurrent.BlockingQueue` interface, so you can use it like the other blocking queues. 
+`PersistentBlockingQueue` implements the `java.util.concurrent.BlockingQueue` interface, so you can use it like other blocking queues. 
 
 Here is a brief example of how to use `PersistentBlockingQueue`:
 
@@ -22,7 +22,7 @@ queue.delete();
 
 ## Queue Builder
 
-`PersistentBlockingQueue.Builder` class provides some methods to configure the queue:
+`PersistentBlockingQueue.Builder` provides some methods to configure the queue:
 
 ```java
 PersistentBlockingQueue<String> queue = new PersistentBlockingQueue.Builder<String>(file)
