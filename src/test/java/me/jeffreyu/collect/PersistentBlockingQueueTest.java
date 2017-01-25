@@ -183,9 +183,7 @@ public class PersistentBlockingQueueTest {
             random.nextBytes(enqueue);
             queue.enqueue(enqueue);
 
-            assertNotNull(queue.head);
-            assertNotNull(queue.tail);
-            assertEquals(queue.head, queue.tail);
+            assertEquals(queue.index.getHeadFile(), queue.index.getTailFile());
             assertEquals(1, queue.size());
             assertEquals(Integer.MAX_VALUE - 1, queue.remainingCapacity());
             assertFalse(queue.isEmpty());
@@ -198,7 +196,7 @@ public class PersistentBlockingQueueTest {
 
             // write multi byte arrays
             List<byte[]> byteArrays = new ArrayList<>();
-            int times = 10000;
+            int times = 1000;
             for (int i = 0; i < times; i++) {
                 byte[] byteArray = new byte[1024];
                 random.nextBytes(byteArray);
@@ -211,6 +209,7 @@ public class PersistentBlockingQueueTest {
 
             List<byte[]> byteArraysRead = new ArrayList<>();
             for (int i = 0; i < times; i++) {
+                System.out.println(i);
                 byte[] byteArray = queue.dequeue();
                 byteArraysRead.add(byteArray);
             }
@@ -408,13 +407,13 @@ public class PersistentBlockingQueueTest {
             queue.put(data);
         }
         assertEquals(100, queue.size());
-        
+
         List<byte[]> drainTo = new ArrayList<>();
         int count = queue.drainTo(drainTo, 10);
         assertEquals(10, count);
         assertEquals(10, drainTo.size());
         assertEquals(90, queue.size());
-        
+
         count = queue.drainTo(drainTo, 100);
         assertEquals(90, count);
         assertEquals(100, drainTo.size());

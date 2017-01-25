@@ -21,6 +21,11 @@ import java.util.function.Consumer;
 import static me.jeffreyu.collect.Preconditions.*;
 import static me.jeffreyu.collect.Serializers.INTEGER_SERIALIZER;
 
+/**
+ * A persistent {@link BlockingQueue} backed by {@link MappedByteBuffer}.
+ *
+ * @param <E> the type of elements held in this queue
+ */
 public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements BlockingQueue<E> {
 
     private static final String INDEX_NAME = ".index";
@@ -35,15 +40,11 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
     final Index index;
     final PageAllocator allocator;
 
-    volatile Page head;
-    volatile Page tail;
-
-    protected PersistentBlockingQueue(
-            File file,
-            Serializer<E> serializer,
-            int capacity,
-            long pageSize,
-            int maxIdlePages) {
+    protected PersistentBlockingQueue(File file,
+                                      Serializer<E> serializer,
+                                      int capacity,
+                                      long pageSize,
+                                      int maxIdlePages) {
         this.directory = file;
         this.serializer = serializer;
         this.allocator = new PageAllocator(directory, maxIdlePages, pageSize);
@@ -63,17 +64,9 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             } else {
                 this.index = new Index(indexFile, capacity);
             }
-            initialize();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    private void initialize() {
-        int headFile = this.index.getHeadFile();
-        this.head = allocator.acquire(headFile);
-        int tailFile = this.index.getTailFile();
-        this.tail = allocator.acquire(tailFile);
     }
 
     @Override
@@ -202,41 +195,11 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             if (index.getSize() == 0)
                 return null;
 
-            final Page[] pageHolder = new Page[]{this.head};
-            final int[] pageOffsetHolder = new int[]{index.getHeadOffset()};
-
-            Consumer<byte[]> reader = (byte[] dst) -> {
-
-                Page page = pageHolder[0];
-                int pageOffset = pageOffsetHolder[0];
-
-                int dstOffset = 0;
-                int dstLength = dst.length;
-                while (dstOffset < dstLength) {
-                    int available = page.remaining(pageOffset);
-                    int remaining = dstLength - dstOffset;
-                    if (available < remaining) {
-                        page.read(pageOffset, dst, dstOffset, available);
-                        int nextPageId = page.getNextPage();
-                        page = allocator.acquire(nextPageId);
-                        pageOffset = 0;
-                        dstOffset += available;
-                    } else {
-                        page.read(pageOffset, dst, dstOffset, remaining);
-                        dstOffset += remaining;
-                        pageOffset = pageOffset + remaining;
-                    }
-                }
-
-                // update
-                pageHolder[0] = page;
-                pageOffsetHolder[0] = pageOffset;
-            };
-
-            byte[] dst = new byte[4];
-            reader.accept(dst);
-            data = new byte[INTEGER_SERIALIZER.decode(dst)];
-            reader.accept(data);
+            Position pos = index.getHead();
+            byte[] lenData = new byte[4];
+            Position newPos = read(lenData, pos);
+            data = new byte[INTEGER_SERIALIZER.decode(lenData)];
+            read(data, newPos); // ignore new position
         } finally {
             lock.unlock();
         }
@@ -303,7 +266,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         int length = src.length;
         int offset = 0;
         Index index = this.index;
-        Page tail = this.tail;
+        Page tail = index.getTail().page;
         int tailOffset = index.getTailOffset();
         while (offset < length) {
             int available = tail.remaining(tailOffset);
@@ -322,54 +285,61 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             }
         }
 
-        this.tail = tail;
         index.setTailFile(tail.getId());
         index.setTailOffset(tailOffset);
     }
 
     protected byte[] dequeue() {
-        byte[] dataLength = new byte[4];
-        read(dataLength);
-        int length = INTEGER_SERIALIZER.decode(dataLength);
-        byte[] dst = new byte[length];
-        read(dst);
+        // assert lock.getHoldCount() == 1
+        Position head = index.getHead();
+        
+        Position pos = head;
+        byte[] lenData = new byte[4];
+        pos = read(lenData, pos);
+        int dataLen = INTEGER_SERIALIZER.decode(lenData);
+        byte[] dst = new byte[dataLen];
+        pos = read(dst, pos);
 
+        // release page
+        Page last = head.page;
+        while (last.getId() != pos.page.getId()) {
+            allocator.release(last.getId());
+            last = allocator.acquire(last.getNextPage());
+        }
+
+        // update position
         Index index = this.index;
+        index.setHeadFile(pos.page.getId());
+        index.setHeadOffset(pos.offset);
         index.setSize(index.getSize() - 1);
+
         notFull.signal();
         return dst;
     }
 
-    protected void read(byte[] dst) {
-        // assert lock.getHoldCount() == 1
-        int length = dst.length;
-        Index index = this.index;
-        Page head = this.head;
-        int headOffset = index.getHeadOffset();
-        int offset = 0;
+    protected Position read(byte[] dst, Position pos) {
+        Page page = pos.page;
+        int pageOff = pos.offset;
 
-        while (offset < length) {
-            int available = head.remaining(headOffset);
-            int remaining = length - offset;
-            if (available < remaining) {
-                head.read(headOffset, dst, offset, available);
-                int nextPageId = head.getNextPage();
-                Page next = allocator.acquire(nextPageId);
-                allocator.release(head.getId());
-                head = next;
-                headOffset = 0;
-                offset += available;
+        int dstLen = dst.length;
+        int dstOff = 0;
+        while (dstOff < dstLen) {
+            int pageAvailable = page.remaining(pageOff);
+            int dstRemain = dstLen - dstOff;
+            if (pageAvailable < dstRemain) {
+                page.read(pageOff, dst, dstOff, pageAvailable);
+                Page next = allocator.acquire(page.getNextPage());
+                page = next;
+                pageOff = 0;
+                dstOff += pageAvailable;
             } else {
-                head.read(headOffset, dst, offset, remaining);
-                offset += remaining;
-                headOffset += remaining;
+                page.read(pageOff, dst, dstOff, dstRemain);
+                dstOff += dstRemain;
+                pageOff += dstRemain;
             }
         }
-        this.head = head;
-        index.setHeadFile(head.getId());
-        index.setHeadOffset(headOffset);
+        return new Position(page, pageOff);
     }
-
 
     @Override
     public Iterator<E> iterator() {
@@ -427,16 +397,56 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         }
     }
 
+
     class Itr implements Iterator<E> {
+
+        private volatile Page currentPage;
+        private volatile int currentPageOffset;
+
+        Itr() {
+            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
+            lock.lock();
+            try {
+                int pageId = index.getHeadFile();
+                this.currentPage = allocator.acquire(pageId);
+                this.currentPageOffset = index.getHeadOffset();
+            } finally {
+                lock.unlock();
+            }
+        }
 
         @Override
         public boolean hasNext() {
-            return false;
+            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
+            lock.lock();
+            try {
+                return currentPage.getId() == index.getHeadFile()
+                        && currentPageOffset == index.getHeadOffset();
+            } finally {
+                lock.unlock();
+            }
         }
 
         @Override
         public E next() {
-            return null;
+            final ReentrantLock lock = PersistentBlockingQueue.this.lock;
+            lock.lock();
+            try {
+
+                return null;
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+
+    static class Position {
+        final Page page;
+        final int offset;
+
+        Position(Page page, int offset) {
+            this.page = page;
+            this.offset = offset;
         }
     }
 
@@ -524,6 +534,14 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
         void setTailOffset(int offset) {
             buffer.putInt(IDX_TAIL_OFFSET, offset);
+        }
+
+        Position getHead() {
+            return new Position(allocator.acquire(getHeadFile()), getHeadOffset());
+        }
+
+        Position getTail() {
+            return new Position(allocator.acquire(getTailFile()), getTailOffset());
         }
 
         @Override
