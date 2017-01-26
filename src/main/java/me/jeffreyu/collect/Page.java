@@ -9,7 +9,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 class Page {
-    
+
     final MappedByteBuffer buffer;
 
     final int id;
@@ -20,15 +20,15 @@ class Page {
     // pageSize limit to Integer.Max + 1 which == 2GB(1L << 31)
     Page(File directory, int id, long pageSize) {
         this.id = id;
-        this.pageSize = pageSize;
-        this.idxNextPage = (int) (pageSize - 4);
         this.file = new File(directory, String.valueOf(id));
+        this.pageSize = file.exists() ? this.file.length() : pageSize;
+        this.idxNextPage = (int) (pageSize - 4);
         try {
             FileChannel channel = FileChannel.open(Paths.get(file.getAbsolutePath()),
                     StandardOpenOption.READ,
                     StandardOpenOption.WRITE,
                     StandardOpenOption.CREATE);
-            buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, pageSize);
+            buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, this.pageSize);
             buffer.load();
             channel.close();
         } catch (IOException e) {

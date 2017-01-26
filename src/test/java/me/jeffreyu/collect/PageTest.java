@@ -17,7 +17,7 @@ public class PageTest {
     public TemporaryFolder tempFolder = new TemporaryFolder();
 
     @Test
-    public void testPageBasic() throws Exception {
+    public void testBasic() throws Exception {
         File file = tempFolder.newFolder();
         Page page = new Page(file, 0, 1024L);
         assertTrue(page.buffer.isLoaded());
@@ -38,7 +38,7 @@ public class PageTest {
     }
 
     @Test
-    public void testPageReadAndWrite() throws Exception {
+    public void testReadAndWrite() throws Exception {
         File file = tempFolder.newFolder();
         Page page = new Page(file, 0, 1024L);
         // check 100 times
@@ -57,7 +57,7 @@ public class PageTest {
     }
 
     @Test
-    public void testPageReload() throws Exception {
+    public void testReload() throws Exception {
         File file = tempFolder.newFolder();
         Page page = new Page(file, 0, 1024L);
 
@@ -72,5 +72,8 @@ public class PageTest {
         byte[] bytesRead = new byte[page.remaining(0)];
         reloadPage.read(0, bytesRead);
         assertArrayEquals(bytesWrite, bytesRead);
+
+        reloadPage = new Page(file, 0, 512L);
+        assertEquals(page.buffer.capacity(), reloadPage.buffer.capacity());
     }
 }
