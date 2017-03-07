@@ -1,4 +1,4 @@
-package me.jeffreyu.collect;
+package io.github.huiyu.collect;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

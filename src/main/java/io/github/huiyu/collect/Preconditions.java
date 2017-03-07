@@ -1,4 +1,4 @@
-package me.jeffreyu.collect;
+package io.github.huiyu.collect;
 
 public class Preconditions {
 

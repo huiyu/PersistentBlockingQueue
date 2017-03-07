@@ -1,9 +1,8 @@
-package me.jeffreyu.collect;
+package io.github.huiyu.collect;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileVisitResult;
@@ -20,9 +19,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
-
-import static me.jeffreyu.collect.Preconditions.*;
-import static me.jeffreyu.collect.Serializers.INTEGER_SERIALIZER;
 
 /**
  * A persistent {@link BlockingQueue} backed by {@link MappedByteBuffer}.
@@ -85,7 +81,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public void put(E e) throws InterruptedException {
-        byte[] data = serializer.encode(checkNotNull(e));
+        byte[] data = serializer.encode(Preconditions.checkNotNull(e));
         final ReentrantLock lock = this.lock;
         final Index index = this.index;
         lock.lockInterruptibly();
@@ -100,7 +96,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public boolean offer(E e, long timeout, TimeUnit unit) throws InterruptedException {
-        byte[] data = serializer.encode(checkNotNull(e));
+        byte[] data = serializer.encode(Preconditions.checkNotNull(e));
         long nanos = unit.toNanos(timeout);
         final ReentrantLock lock = this.lock;
         final Index index = this.index;
@@ -120,7 +116,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public boolean offer(E e) {
-        byte[] data = serializer.encode(checkNotNull(e));
+        byte[] data = serializer.encode(Preconditions.checkNotNull(e));
         final ReentrantLock lock = this.lock;
         final Index index = this.index;
         lock.lock();
@@ -201,7 +197,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             Position pos = index.getHead();
             byte[] lenData = new byte[4];
             Position newPos = read(lenData, pos);
-            data = new byte[INTEGER_SERIALIZER.decode(lenData)];
+            data = new byte[Serializers.INTEGER_SERIALIZER.decode(lenData)];
             read(data, newPos); // ignore new position
         } finally {
             lock.unlock();
@@ -228,8 +224,8 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     @Override
     public int drainTo(Collection<? super E> c, int maxElements) {
-        checkNotNull(c);
-        checkArgument(c != this);
+        Preconditions.checkNotNull(c);
+        Preconditions.checkArgument(c != this);
         if (maxElements <= 0) return 0;
 
         final Index index = this.index;
@@ -258,7 +254,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
 
     protected void enqueue(byte[] data) {
         // assert lock.getHoldCount() == 1
-        write(INTEGER_SERIALIZER.encode(data.length));
+        write(Serializers.INTEGER_SERIALIZER.encode(data.length));
         write(data);
         Index index = this.index;
         index.setSize(index.getSize() + 1);
@@ -299,7 +295,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
         Position pos = head;
         byte[] lenData = new byte[4];
         pos = read(lenData, pos);
-        int dataLen = INTEGER_SERIALIZER.decode(lenData);
+        int dataLen = Serializers.INTEGER_SERIALIZER.decode(lenData);
         byte[] dst = new byte[dataLen];
         pos = read(dst, pos);
 
@@ -449,7 +445,7 @@ public class PersistentBlockingQueue<E> extends AbstractQueue<E> implements Bloc
             try {
                 byte[] data = new byte[4];
                 Position newPos = read(data, curPos);
-                data = new byte[INTEGER_SERIALIZER.decode(data)];
+                data = new byte[Serializers.INTEGER_SERIALIZER.decode(data)];
                 newPos = read(data, newPos);
                 curPos = newPos;
                 return serializer.decode(data);
