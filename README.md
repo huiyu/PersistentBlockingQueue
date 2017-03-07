@@ -1,5 +1,7 @@
 # PersistentBlockingQueue
 
+[![Build Status](https://travis-ci.org/huiyu/persistent-blocking-queue.svg?branch=master)](https://travis-ci.org/huiyu/persistent-blocking-queue)
+
 `PersistentBlockingQueue` is a persistent blocking queue backed by `MappedByteBuffer`.
 
 ## Basic Usage

@@ -33,7 +33,6 @@ public class PageTest {
         assertFalse(page.hasRemaining(1020));
 
         page.release();
-        assertFalse(page.buffer.isLoaded());
         assertFalse(page.file.exists());
     }
 
